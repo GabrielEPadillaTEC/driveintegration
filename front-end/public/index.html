@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Drive Login</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 50px;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <h1>Login to Google Drive Integration</h1>
+  <p>Authenticate with your Google account to access the Drive Dashboard.</p>
+  <button onclick="authenticate()">Login with Google</button>
+
+  <script>
+    const backendUrl = 'https://soa-2-1-driveintegration.wl.r.appspot.com';
+
+    // Trigger OAuth authentication
+    function authenticate() {
+      fetch(`${backendUrl}/auth/url`)
+        .then((response) => response.json())
+        .then((data) => {
+          window.location.href = data.url;
+        })
+        .catch((error) => console.error('Authentication error:', error));
+    }
+  </script>
+</body>
+</html>

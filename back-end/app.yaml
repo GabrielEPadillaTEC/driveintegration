@@ -1,0 +1,16 @@
+runtime: nodejs18
+instance_class: F2  # Optional: Set the instance type based on your app's expected load
+
+env_variables:
+  CLIENT_ID: "107212733095-vmmbjrlen65rftp36g005jb7p8hefaqf.apps.googleusercontent.com"
+  CLIENT_SECRET: "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"
+  REDIRECT_URI: "https://soa-2-1-driveintegration.wl.r.appspot.com/oauth2callback"  # Update to production redirect URL when live
+
+handlers:
+  - url: /.*
+    script: auto
+
+# Optional: For security headers or CORS
+automatic_scaling:
+  target_cpu_utilization: 0.65
+  max_instances: 3

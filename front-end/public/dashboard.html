@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Drive Dashboard</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      position: relative;
+    }
+
+    #profile {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      display: flex;
+      align-items: center;
+    }
+
+    #profile img {
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      margin-right: 10px;
+    }
+
+    .file {
+      border: 1px solid #962420;
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 4px;
+      cursor: pointer;
+      background-color: #ffffff;
+      color: #ca333375;
+    }
+
+    .file:hover {
+      background-color: #f9f9f9;
+    }
+
+    .folder {
+      border: 1px solid #ddd;
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 4px;
+      cursor: pointer;
+      background-color: #76bdff;
+      color: #fff;
+    }
+    }
+
+    .folder:hover {
+      background-color: #5ca4e1;
+    }
+
+    .actions {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Google Drive Dashboard</h1>
+  <div id="profile">
+    <img id="profile-pic" src="" alt="Profile Picture" />
+    <span id="profile-name">Loading...</span>
+  </div>
+  <button onclick="logout()">Logout</button>
+
+  <div id="drive-structure">
+    <h2>Folder Structure</h2>
+    <div id="folders">Loading...</div>
+    <div id="folder-contents" style="display: none;">
+      <h3>Folder Contents</h3>
+      <div id="files">Loading...</div>
+      <button onclick="goBack()">Go Back</button>
+    </div>
+  </div>
+
+  <div class="actions">
+    <h2>Actions</h2>
+    <button onclick="createFolder()">Create Folder</button>
+    <input type="file" id="uploadFile" style="display:none;" onchange="uploadFile(event)" />
+    <button onclick="document.getElementById('uploadFile').click()">Upload File</button>
+  </div>
+
+  <script>
+    const backendUrl = "https://soa-2-1-driveintegration.wl.r.appspot.com";
+
+    let currentFolderId = null;
+
+    function buildFolderTree(folders) {
+      const folderMap = new Map();
+      const roots = [];
+
+      // Create folder map
+      folders.forEach(folder => {
+        folderMap.set(folder.id, { ...folder, children: [] });
+      });
+
+      // Assign children to parents or mark as root
+      folders.forEach(folder => {
+        if (folder.parents && folder.parents[0]) {
+          const parent = folderMap.get(folder.parents[0]);
+          if (parent) parent.children.push(folderMap.get(folder.id));
+        } else {
+          roots.push(folderMap.get(folder.id));
+        }
+      });
+
+      return roots;
+    }
+
+    function displayFolders(tree, container) {
+      tree.forEach(node => {
+        const div = document.createElement("div");
+        div.className = "folder";
+        div.innerHTML = node.name || "Unnamed Folder";
+        div.onclick = () => fetchFolderContents(node.id);
+        container.appendChild(div);
+
+        if (node.children.length > 0) {
+          const childContainer = document.createElement("div");
+          childContainer.style.marginLeft = "20px"; // Indent for nested folders
+          displayFolders(node.children, childContainer);
+          container.appendChild(childContainer);
+        }
+      });
+    }
+
+    async function fetchDriveStructure() {
+      const userId = new URLSearchParams(window.location.search).get('userId');
+
+      if (!userId) {
+        alert("User ID is missing. Please log in again.");
+        window.location.href = "index.html"; // Redirect to login
+        return;
+      }
+
+      const foldersDiv = document.getElementById("folders");
+      foldersDiv.innerHTML = "Loading...";
+      document.getElementById("folder-contents").style.display = "none";
+      currentFolderId = null;
+
+      try {
+        const response = await fetch(`${backendUrl}/drive/folders?userId=${userId}`);
+        const folders = await response.json();
+
+        foldersDiv.innerHTML = "";
+
+        const folderTree = buildFolderTree(folders);
+        displayFolders(folderTree, foldersDiv);
+      } catch (error) {
+        foldersDiv.innerHTML = "Error loading folders.";
+        console.error(error);
+      }
+    }
+
+    async function fetchFolderContents(folderId) {
+      const userId = new URLSearchParams(window.location.search).get('userId');
+      const filesDiv = document.getElementById("files");
+      filesDiv.innerHTML = "Loading...";
+      document.getElementById("folder-contents").style.display = "block";
+      document.getElementById("folders").style.display = "none";
+      currentFolderId = folderId;
+
+      try {
+        const response = await fetch(`${backendUrl}/drive/folders/${folderId}?userId=${userId}`);
+        const contents = await response.json();
+
+        filesDiv.innerHTML = "";
+        contents.forEach(item => {
+          const div = document.createElement("div");
+          div.className = item.type === 'folder' ? 'folder' : 'file';
+          div.innerHTML = `
+        ${item.name || "Unnamed Item"} 
+        ${item.type === 'file' ? `
+          <button onclick="downloadFile('${item.id}')">Download</button>
+          <button>Delete</button>` : ""}
+      `;
+          div.onclick = item.type === 'folder' ? () => fetchFolderContents(item.id) : null;
+          filesDiv.appendChild(div);
+        });
+      } catch (error) {
+        filesDiv.innerHTML = "Error loading contents.";
+        console.error(error);
+      }
+    }
+
+
+
+    // Go back to folder structure
+    function goBack() {
+      document.getElementById("folder-contents").style.display = "none";
+      document.getElementById("folders").style.display = "block";
+      fetchDriveStructure();
+    }
+
+    async function createFolder() {
+      const folderName = prompt("Enter folder name:");
+      if (!folderName) return;
+
+      const userId = new URLSearchParams(window.location.search).get('userId');
+      try {
+        const response = await fetch(`${backendUrl}/drive/folders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: folderName, parent: currentFolderId, userId }),
+        });
+        if (response.ok) {
+          currentFolderId ? fetchFolderContents(currentFolderId) : fetchDriveStructure();
+        } else {
+          alert("Error creating folder.");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    //upload
+    async function uploadFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("name", file.name); // Add the file name
+      formData.append("mimeType", file.type); // Add the MIME type
+      formData.append("parent", currentFolderId || ""); // Add the current folder ID
+      const userId = new URLSearchParams(window.location.search).get("userId");
+      formData.append("userId", userId); // Add the user ID
+
+      try {
+        const response = await fetch(`${backendUrl}/drive/upload`, {
+          method: "POST",
+          body: formData,
+        });
+        if (response.ok) {
+          const result = await response.json();
+          console.log("File uploaded successfully:", result);
+          currentFolderId ? fetchFolderContents(currentFolderId) : fetchDriveStructure();
+        } else {
+          const error = await response.json();
+          alert(`Error uploading file: ${error.message || "Unknown error"}`);
+        }
+      } catch (error) {
+        console.error("Error uploading file:", error);
+        alert("Error uploading file. Check console for details.");
+      }
+    }
+
+
+
+    //download
+    async function downloadFile(fileId) {
+      try {
+        const response = await fetch(`${backendUrl}/drive/files/${fileId}`);
+        if (response.ok) {
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.style.display = "none";
+          a.href = url;
+          a.download = "file";
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+        } else {
+          alert("Error downloading file.");
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+
+    // Logout function
+    function logout() {
+      localStorage.removeItem("idToken"); // Clear stored ID token
+      window.location.href = "index.html";
+    }
+
+
+    // Fetch user profile info
+    async function fetchUserProfile() {
+      const userId = new URLSearchParams(window.location.search).get("userId");
+      if (!userId) {
+        alert("User ID is missing. Please log in again.");
+        window.location.href = "index.html";
+        return;
+      }
+
+      try {
+        const response = await fetch(`${backendUrl}/user/profile?userId=${userId}`);
+        if (response.ok) {
+          const user = await response.json();
+          document.getElementById("profile-pic").src = user.picture || "default-pic.png";
+          document.getElementById("profile-name").textContent = user.name || "User";
+        } else {
+          console.error("Error fetching user profile.");
+        }
+      } catch (error) {
+        console.error("Error fetching user profile:", error);
+      }
+    }
+
+    // List load and pfp
+    fetchDriveStructure();
+    fetchUserProfile();
+  </script>
+</body>
+
+</html>
